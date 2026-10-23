@@ -6,6 +6,9 @@ __pycache__/
 .venv/
 venv/
 
+# 运行时数据（SQLite）
+data/
+
 # macOS
 .DS_Store
 

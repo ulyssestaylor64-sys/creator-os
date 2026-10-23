@@ -731,12 +731,15 @@
       var sync = $('#syncTime');
       if (list) list.style.opacity = '.35';
       if (API.enabled()) {
-        API.get('/topics', { source: 'all', refresh: 1 }).then(function (res) {
-          rebuildTopicList(res.topics);
-          selectTopic(0);
-          if (list) list.style.opacity = '1';
-          if (sync) sync.textContent = res.sync_time || '刚刚更新 · 抖音热榜 / 创作灵感';
-          toast('热点已刷新 · 新增 6 条高匹配选题');
+        API.post('/hot/refresh', {}).then(function (hot) {
+          return API.get('/topics', { source: 'all', refresh: 1 }).then(function (res) {
+            rebuildTopicList(res.topics);
+            selectTopic(0);
+            if (list) list.style.opacity = '1';
+            if (sync) sync.textContent = hot.sync_time || res.sync_time || '刚刚更新';
+            var n = hot.count || 0;
+            toast(n ? '已同步 ' + n + ' 条真实热榜 · 来自 36氪/少数派/虎嗅' : '热榜源暂时不可用，已保留现有选题');
+          });
         }).catch(function () {
           if (list) list.style.opacity = '1';
           if (sync) sync.textContent = '刚刚更新 · 抖音热榜 / 创作灵感';
@@ -770,6 +773,21 @@
       btn.dataset.joined = '1';
       btn.innerHTML = '<svg width="12" height="12"><use href="#i-check"/></svg> 已加入计划';
       toast('已加入 7 天计划 · 可在总览查看');
+    });
+  }
+
+  if ($('#saveTopic')) {
+    $('#saveTopic').addEventListener('click', function () {
+      var t = backendTopics[currentTopic] || topicData[currentTopic];
+      if (!t) { toast('请先选择一个选题'); return; }
+      if (!API.enabled()) { toast('已收藏到本地选题库'); return; }
+      var btn = $('#saveTopic');
+      API.post('/topics/' + t.id + '/save', {})
+        .then(function () {
+          btn.innerHTML = '<svg width="12" height="12"><use href="#i-check"/></svg> 已收藏';
+          toast('已收藏到选题库 · 重启后仍可查看');
+        })
+        .catch(function () { toast('收藏失败，请稍后重试'); });
     });
   }
 
@@ -1088,11 +1106,73 @@
     });
   }
 
+  // 评论规则：从服务端载入已保存的规则
+  function renderRuleRow(rule) {
+    var map = { '好评': 'green', '需求建议': 'lime', '情绪共鸣': 'orange', '差评': 'orange' };
+    var row = D.createElement('div');
+    row.className = 'rule-row';
+    row.innerHTML = '<span class="rule-when">包含</span><span class="rule-key">' + esc(rule.keyword) +
+      '</span><span class="rule-arrow">→</span><span class="rule-tag pill ' + (map[rule.category] || '') + '">' +
+      esc(rule.category) + '</span>';
+    var list = $('#ruleList');
+    if (list) list.appendChild(row);
+    var count = $$('#ruleList .rule-row').length;
+    var pill = $('.rules-card .card-head .pill.green');
+    if (pill) pill.textContent = count + ' 条生效';
+  }
+
+  if (API.enabled()) {
+    API.get('/comments/rules').then(function (res) {
+      var saved = (res && res.rules) || [];
+      if (saved.length) {
+        var list = $('#ruleList');
+        if (list) list.innerHTML = '';
+        saved.slice(0, 8).reverse().forEach(renderRuleRow);
+      }
+    }).catch(function () {});
+  }
+
+  // 评论洞察：进入页面时用 AI 提炼一次
+  var signalsLoaded = false;
+  function renderSignals(signals) {
+    var grid = $('#insightGrid');
+    if (!grid || !signals || !signals.length) return;
+    var pillMap = { '高意向': 'green', '体验问题': 'orange', '内容资产': 'blue', '需求建议': 'lime' };
+    grid.innerHTML = signals.map(function (s, i) {
+      var label = s.label || ('SIGNAL 0' + (i + 1) + ' · AI 提炼');
+      var pill = s.pill || '内容资产';
+      var quote = s.quote || '';
+      var advice = s.advice || '';
+      var seed = advice || quote;
+      return '<div class="insight-card">' +
+        '<div class="insight-top"><span class="insight-idx">' + esc(label) + '</span>' +
+        '<span class="pill ' + (pillMap[pill] || 'green') + '">' + esc(pill) + '</span></div>' +
+        '<p class="insight-quote">“' + esc(quote) + '”</p>' +
+        '<div class="insight-do"><p>' + esc(advice) + '</p>' +
+        '<button class="link-action" data-convert="' + esc(seed.slice(0, 20)) + '">转为选题 ' +
+        '<svg width="10" height="10"><use href="#i-arrow-right"/></svg></button></div></div>';
+    }).join('');
+  }
+
+  function loadSignals() {
+    if (signalsLoaded || !API.enabled()) return;
+    signalsLoaded = true;
+    API.post('/comments/insights', {}).then(function (res) {
+      renderSignals(res.signals);
+    }).catch(function () { signalsLoaded = false; });
+  }
+
+  window.addEventListener('creator:page', function (e) {
+    if (e.detail && e.detail.page === 'comments') loadSignals();
+  });
+
   if ($('#syncComments')) {
     $('#syncComments').addEventListener('click', function () {
       if (API.enabled()) {
         API.get('/comments', { filter: 'all' }).then(function (data) {
           renderComments(data);
+          signalsLoaded = false;
+          loadSignals();
           toast('已同步 ' + (data.total || 0).toLocaleString('en-US') + ' 条评论 · 新增 12 条');
         }).catch(function () {
           toast('已同步 1,284 条评论 · 新增 12 条');
