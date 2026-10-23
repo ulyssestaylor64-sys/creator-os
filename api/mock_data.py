@@ -2,6 +2,7 @@
 Creator OS — 业务假数据生成器
 所有返回数据均为中文、贴近真实场景。
 """
+import hashlib
 import random
 from datetime import datetime, timedelta
 from typing import Any
@@ -19,6 +20,10 @@ TOPIC_TITLES = [
     "普通人学 AI 的最佳顺序，我踩过的 3 个坑",
     "自由职业第 200 天：我靠这 4 个习惯稳定月入 3 万",
     "桌面效率改造：这 5 个小东西让我每天多 1 小时",
+    "我把工作流交给 AI 之后，终于有时间做内容了",
+    "从 0 到 1 万粉，我只做对了 3 件事",
+    "为什么你的内容没人看？先检查这 3 个细节",
+    "每天 30 分钟，我用 AI 维持日更",
 ]
 
 TOPIC_SOURCES = ["抖音热榜", "同赛道爆款", "搜索趋势", "创作灵感"]
@@ -58,6 +63,31 @@ HIT_TITLES = [
     "我拒绝了月薪 5 万的 offer，因为算清了这笔账",
     "AI 工具清单：用了 60 个之后，我只留下了这 5 个",
 ]
+
+# 固定爆款池：id 与内容一一对应，避免列表与拉片详情错位
+HIT_POOL = [
+    {
+        "id": f"h_{2001 + i}",
+        "idx": f"{i + 1:02d}",
+        "title": title,
+        "kind": "analyzed" if i < 4 else "saved",
+        "plays": ["328.4w", "612.8w", "186.2w", "241.6w", "98.4w", "154.2w"][i],
+        "likes": ["12.4w", "28.6w", "9.1w", "11.8w", "4.2w", "6.7w"][i],
+        "tags": [
+            ["钩子 · 结果前置", "情绪 · 掌控感"],
+            ["钩子 · 身份对比", "结构 · 对比体"],
+            ["情绪 · 真实共鸣", "结构 · 清单体"],
+            ["钩子 · 痛点直击", "CTA · 领模板"],
+            ["钩子 · 反常识", "情绪 · 身份认同"],
+            ["结构 · 减法清单", "视觉 · 实拍"],
+        ][i],
+    }
+    for i, title in enumerate(HIT_TITLES)
+]
+
+# 用户导入的爆款，进程内保存，便于导入后立即查看拉片详情
+_IMPORTED_HITS: dict[str, dict] = {}
+_IMPORT_SEQ = {"n": 0}
 
 BRAND_NAMES = [
     "MOKA 咖啡",
@@ -103,6 +133,58 @@ def _random_id(prefix: str = "id") -> str:
     return f"{prefix}_{random.randint(100000, 999999)}"
 
 
+def _seed_rand(key: str) -> random.Random:
+    """按固定 key 生成可复现的随机数，保证同一资源多次请求结果一致。"""
+    digest = hashlib.md5(key.encode("utf-8")).hexdigest()[:8]
+    return random.Random(int(digest, 16))
+
+
+# 固定选题池：同一 id 的列表与详情必须一致
+_TOPIC_SEED = [
+    ("t_1001", 0, "抖音热榜", "25–35 职场人", "竞争 中", "预估 25–60w 播放", 95, 9.4, "+124%",
+     "结果前置 + 30 天实验体，适合直接复刻你的「亲测」系列结构。"),
+    ("t_1002", 1, "同赛道爆款", "25–40 职场人 / 管理者", "竞争 高", "预估 35–70w 播放", 88, 8.9, "+41%",
+     "身份对比制造强冲突，前 3 秒留存高，但同质化严重，需要新角度。"),
+    ("t_1003", 2, "搜索趋势", "22–32 职场新人", "竞争 低", "预估 20–50w 播放", 92, 9.1, "+26%",
+     "搜索需求持续上升，你的会议纪要系列可以直接承接，转化基础最好。"),
+    ("t_1004", 3, "创作灵感", "24–35 个人创作者", "竞争 中", "预估 15–40w 播放", 90, 8.6, "+18%",
+     "人设 + 清单体，适合强化「一人公司」标签，评论区易产生工具追问。"),
+    ("t_1005", 4, "抖音热榜", "20–35 AI 初学者", "竞争 高", "预估 45–90w 播放", 86, 9.6, "+9%",
+     "流量稳定但广告感强，建议用「真实使用 30 天」降低推广感。"),
+    ("t_1006", 5, "同赛道爆款", "25–35 高压职场人", "竞争 低", "预估 20–50w 播放", 83, 8.4, "+12%",
+     "情绪共鸣型内容互动率高但涨粉慢，适合每周一条调节节奏。"),
+    ("t_1007", 6, "搜索趋势", "25–35 职场人", "竞争 低", "预估 15–40w 播放", 89, 8.8, "新",
+     "提示词类内容收藏率高，可承接模板领取，形成私域入口。"),
+    ("t_1008", 7, "创作灵感", "20–35 AI 初学者", "竞争 中", "预估 25–60w 播放", 85, 8.2, "新",
+     "踩坑复盘天然带信任感，适合做成系列第二条，承接上一条流量。"),
+    ("t_1009", 10, "创作灵感", "24–35 个人创作者", "竞争 低", "预估 20–50w 播放", 91, 8.7, "+31%",
+     "「终于有时间」是强共鸣点，适合用真实日程表做证据，承接自由职业人群。"),
+    ("t_1010", 11, "同赛道爆款", "22–32 职场新人", "竞争 高", "预估 35–70w 播放", 87, 9.0, "+22%",
+     "涨粉复盘类内容收藏率高，建议只讲 3 件事，避免变成流水账。"),
+    ("t_1011", 12, "抖音热榜", "25–35 职场人", "竞争 中", "预估 15–40w 播放", 84, 8.5, "+14%",
+     "问题诊断型开头留人强，适合做成系列合集，提升主页停留。"),
+    ("t_1012", 13, "搜索趋势", "20–35 AI 初学者", "竞争 低", "预估 15–40w 播放", 93, 8.3, "新",
+     "「每天 30 分钟」降低行动门槛，搜索需求稳定，适合长期更新。"),
+]
+
+TOPIC_POOL = [
+    {
+        "id": row[0],
+        "title": TOPIC_TITLES[row[1]],
+        "source": row[2],
+        "audience": row[3],
+        "competition": row[4],
+        "estimate": row[5],
+        "match": row[6],
+        "heat": row[7],
+        "rise": row[8],
+        "peak": round(row[7] * 1.06, 1),
+        "desc": row[9],
+    }
+    for row in _TOPIC_SEED
+]
+
+
 def health() -> dict:
     return {
         "status": "ok",
@@ -113,68 +195,74 @@ def health() -> dict:
 
 
 def generate_topics(source: str = "all", refresh: bool = False) -> list[dict]:
-    count = 8 if refresh else 6
+    """返回固定选题池；refresh 会多返回新选题，但 id 与内容保持稳定。"""
+    limit = 8 if refresh else 6
+    if source in ("all", "", None):
+        # 按来源轮转取数，保证每个标签页都有足够内容
+        buckets: dict[str, list[dict]] = {}
+        for t in TOPIC_POOL:
+            buckets.setdefault(t["source"], []).append(t)
+        ordered = [buckets.get(s, []) for s in TOPIC_SOURCES]
+        pool: list[dict] = []
+        depth = 0
+        while len(pool) < limit and any(depth < len(b) for b in ordered):
+            for bucket in ordered:
+                if depth < len(bucket):
+                    pool.append(bucket[depth])
+                    if len(pool) >= limit:
+                        break
+            depth += 1
+    else:
+        pool = [t for t in TOPIC_POOL if t["source"] == source]
+        if not pool:
+            pool = TOPIC_POOL
+
     topics = []
-    for i in range(count):
-        src = TOPIC_SOURCES[i % len(TOPIC_SOURCES)] if source == "all" else source
-        heat = round(random.uniform(7.5, 9.7), 1)
-        rise = random.choice(["+12%", "+18%", "+26%", "+41%", "+124%", "+9%", "新"])
-        match_rate = random.randint(78, 96)
-        competition = random.choice(["竞争 低", "竞争 中", "竞争 高"])
-        topics.append({
-            "id": _random_id("t"),
-            "rank": f"{i + 1:02d}" if i < 6 else "NEW",
-            "title": TOPIC_TITLES[i % len(TOPIC_TITLES)],
-            "source": src,
-            "audience": TOPIC_AUDIENCES[i % len(TOPIC_AUDIENCES)],
-            "competition": competition,
-            "estimate": random.choice(["预估 15–40w 播放", "预估 20–50w 播放", "预估 25–60w 播放",
-                                         "预估 35–70w 播放", "预估 40–80w 播放", "预估 45–90w 播放"]),
-            "match": match_rate,
-            "heat": heat,
-            "rise": rise,
-            "peak": round(heat * random.uniform(1.02, 1.12), 1),
-            "desc": random.choice([
-                "结果前置 + 30 天实验体，适合直接复刻你的「亲测」系列结构。",
-                "身份对比制造强冲突，前 3 秒留存高，但同质化严重，需要新角度。",
-                "搜索需求持续上升，你的会议纪要系列可以直接承接，转化基础最好。",
-                "人设 + 清单体，适合强化「一人公司」标签，评论区易产生工具追问。",
-                "流量稳定但广告感强，建议用「真实使用 30 天」降低推广感。",
-                "情绪共鸣型内容互动率高但涨粉慢，适合每周一条调节节奏。",
-            ]),
-        })
+    for i, base in enumerate(pool[:limit]):
+        item = dict(base)
+        item["rank"] = f"{i + 1:02d}" if i < 6 else "NEW"
+        if refresh and i < 2:
+            # 刷新时只轻微上调热度，id / 标题 / 详情不变
+            item["heat"] = round(min(9.9, base["heat"] + 0.1), 1)
+            item["rise"] = "+8%"
+        topics.append(item)
     return topics
 
 
+def _find_topic(topic_id: str) -> dict | None:
+    for t in TOPIC_POOL:
+        if t["id"] == topic_id:
+            return t
+    return None
+
+
 def generate_topic_detail(topic_id: str) -> dict | None:
-    t = None
-    for i in range(6):
-        if topic_id.endswith(str(i)) or topic_id == _random_id(f"t{i}"):
-            t = i
-            break
-    if t is None:
-        t = random.randint(0, 5)
-    title = TOPIC_TITLES[t % len(TOPIC_TITLES)]
+    base = _find_topic(topic_id)
+    if not base:
+        return None
+
+    idx = TOPIC_POOL.index(base)
+    rnd = _seed_rand(topic_id)
     labels = [_today_str(d) for d in range(-6, 1)]
-    base = random.uniform(5.0, 7.5)
-    trend = [round(base + i * random.uniform(0.3, 0.8) + random.uniform(-0.2, 0.2), 1) for i in range(7)]
-    trend[-1] = round(max(trend[-1], 7.8), 1)
-    framework = FRAMEWORK_TEMPLATES[t % len(FRAMEWORK_TEMPLATES)]
+    start = base["heat"] - 1.6
+    trend = [round(start + k * 0.32 + rnd.uniform(-0.15, 0.15), 1) for k in range(7)]
+    trend[-1] = base["heat"]
+    framework = FRAMEWORK_TEMPLATES[idx % len(FRAMEWORK_TEMPLATES)]
     refs = [
         {"title": "我把 ChatGPT 当同事用了 30 天", "plays": "328.4w", "thumb": "hc1"},
         {"title": "一个人做自媒体的第 180 天", "plays": "186.2w", "thumb": "hc3"},
         {"title": "月薪 3 万的人都在用的工作流", "plays": "612.8w", "thumb": "hc2"},
     ]
     return {
-        "id": topic_id,
-        "title": title,
-        "audience": TOPIC_AUDIENCES[t % len(TOPIC_AUDIENCES)],
-        "competition": random.choice(["竞争 低", "竞争 中", "竞争 高"]),
-        "estimate": random.choice(["预估 15–40w 播放", "预估 35–70w 播放", "预估 45–90w 播放"]),
-        "match": random.randint(78, 96),
+        "id": base["id"],
+        "title": base["title"],
+        "audience": base["audience"],
+        "competition": base["competition"],
+        "estimate": base["estimate"],
+        "match": base["match"],
         "peak": max(trend),
-        "rise": random.choice(["+12%", "+26%", "+41%", "+124%"]),
-        "reason": "你近 7 天「AI 会议纪要」选题平均完播 38.2%，高于账号均值 41%。这条选题可直接复用验证过的结构。",
+        "rise": base["rise"],
+        "reason": base["desc"],
         "trend": {"labels": labels, "values": trend},
         "framework": framework,
         "refs": refs,
@@ -182,7 +270,8 @@ def generate_topic_detail(topic_id: str) -> dict | None:
 
 
 def generate_draft(topic_id: str, draft_type: str = "script") -> dict:
-    title = TOPIC_TITLES[int(topic_id[-1]) % len(TOPIC_TITLES)] if topic_id[-1].isdigit() else TOPIC_TITLES[0]
+    base = _find_topic(topic_id)
+    title = base["title"] if base else TOPIC_TITLES[0]
     if draft_type == "story":
         return {
             "type": "story",
@@ -345,104 +434,118 @@ def add_comment_rule(keyword: str, category: str) -> dict:
 
 def generate_hits(kind: str = "all") -> list[dict]:
     hits = []
-    for i, title in enumerate(HIT_TITLES):
-        hit_kind = "analyzed" if i < 4 else "saved"
-        if kind != "all" and hit_kind != kind:
+    for base in HIT_POOL:
+        if kind != "all" and base["kind"] != kind:
             continue
-        hits.append({
-            "id": _random_id("h"),
-            "idx": f"{i + 1:02d}",
-            "title": title,
-            "kind": hit_kind,
-            "plays": random.choice(["328.4w", "612.8w", "186.2w", "241.6w", "98.4w", "154.2w"]),
-            "likes": random.choice(["12.4w", "28.6w", "9.1w", "11.8w", "4.2w", "6.7w"]),
-            "tags": random.choice([
-                ["钩子 · 结果前置", "情绪 · 掌控感"],
-                ["钩子 · 身份对比", "结构 · 对比体"],
-                ["情绪 · 真实共鸣", "结构 · 清单体"],
-                ["钩子 · 痛点直击", "CTA · 领模板"],
-                ["钩子 · 反常识", "情绪 · 身份认同"],
-                ["结构 · 减法清单", "视觉 · 实拍"],
-            ]),
-        })
+        hits.append(dict(base))
+    for base in _IMPORTED_HITS.values():
+        if kind == "saved":
+            continue
+        hits.append({"id": base["id"], "idx": "NEW", "title": base["title"],
+                     "kind": "analyzed", "plays": "待验证", "likes": "待验证",
+                     "tags": ["新导入", "待拉片"]})
     return hits
 
 
+_DIM_PRESETS = [
+    {
+        "hook": "结果前置 + 身份代入",
+        "hook_note": "第一句先给结果，第二句绑定「打工人」身份。",
+        "emotion": "职场焦虑 → 掌控感",
+        "emotion_note": "先承认被工作追着跑，再给出可控的小胜利。",
+        "structure": "痛点 → 反常识 → 方法 → 结果",
+        "structure_note": "每个段落只承担一个叙事任务，信息密度高。",
+        "visual": "大字幕 + 桌面实拍",
+        "visual_note": "关键结果用全屏大字卡停顿 0.8 秒，强化记忆。",
+        "cta": "评论区领模板",
+        "cta_note": "用「整理好了」替代「点赞关注」，降低反感。",
+        "formula": "可复用公式：<b>结果前置</b> → 真实实验 → 反常识转折 → 可复用清单 → 低门槛 CTA。",
+    },
+    {
+        "hook": "身份对比 + 数字锚点",
+        "hook_note": "「8000」和「3 万」同时出现，制造即时落差。",
+        "emotion": "不公平感 → 希望",
+        "emotion_note": "先让观众代入委屈，再给出可复制的路径。",
+        "structure": "对比 → 归因 → 方法 → 结果",
+        "structure_note": "用两份真实周报做视觉证据。",
+        "visual": "双屏对比 + 工资条",
+        "visual_note": "左右分屏，关键差异用红框圈出。",
+        "cta": "评论区领模板",
+        "cta_note": "把「你怎么看」换成「要不要模板」，转化更直接。",
+        "formula": "可复用公式：<b>身份对比</b> → 数据落差 → 结构拆解 → 模板交付。",
+    },
+]
+
+_STRUCTURE_PRESETS = [
+    [
+        {"label": "钩子 18%", "w": 18, "bg": "#c3ed5a", "fg": "#1a2414", "legend": "0–3s 钩子"},
+        {"label": "痛点 27%", "w": 27, "bg": "#1f6b4e", "fg": "#fff", "legend": "3–12s 痛点"},
+        {"label": "方法 38%", "w": 38, "bg": "#9cc7b3", "fg": "", "legend": "12–45s 方法"},
+        {"label": "CTA 17%", "w": 17, "bg": "#e2592f", "fg": "#fff", "legend": "45–58s CTA"},
+    ],
+    [
+        {"label": "钩子 15%", "w": 15, "bg": "#c3ed5a", "fg": "#1a2414", "legend": "0–3s 对比"},
+        {"label": "落差 25%", "w": 25, "bg": "#1f6b4e", "fg": "#fff", "legend": "3–12s 落差"},
+        {"label": "拆解 42%", "w": 42, "bg": "#9cc7b3", "fg": "", "legend": "12–45s 拆解"},
+        {"label": "CTA 18%", "w": 18, "bg": "#e2592f", "fg": "#fff", "legend": "45–58s CTA"},
+    ],
+]
+
+_GRAPH_PRESETS = [
+    {"topic": "30 天实验", "identity": "一人公司", "hook": "结果前置", "emotion": "焦虑→释然",
+     "visual": "大字幕", "rhythm": "3 秒反转", "structure": "痛点→方法", "cta": "领模板", "core": "328.4w"},
+    {"topic": "周报对比", "identity": "打工人", "hook": "身份对比", "emotion": "落差→希望",
+     "visual": "双屏对比", "rhythm": "5 秒反转", "structure": "对比→拆解", "cta": "领模板", "core": "612.8w"},
+    {"topic": "180 天记录", "identity": "个人 IP", "hook": "时间节点", "emotion": "迷茫→笃定",
+     "visual": "日记实拍", "rhythm": "慢节奏", "structure": "时间线→清单", "cta": "关注追更", "core": "186.2w"},
+    {"topic": "模板清单", "identity": "职场人", "hook": "痛点直击", "emotion": "疲惫→解救",
+     "visual": "录屏大字卡", "rhythm": "3 秒切入", "structure": "痛点→方案", "cta": "领模板", "core": "241.6w"},
+    {"topic": "拒绝 offer", "identity": "高薪职场人", "hook": "反常识", "emotion": "羡慕→认同",
+     "visual": "真人白板", "rhythm": "算账节奏", "structure": "悬念→观点", "cta": "开放提问", "core": "98.4w"},
+    {"topic": "减法清单", "identity": "工具控", "hook": "减法数字", "emotion": "焦虑→清晰",
+     "visual": "桌面俯拍", "rhythm": "清单节奏", "structure": "总→分→总", "cta": "收藏", "core": "154.2w"},
+]
+
+
 def generate_hit_detail(hit_id: str) -> dict | None:
-    idx = int(hit_id[-1]) % len(HIT_TITLES) if hit_id[-1].isdigit() else 0
-    title = HIT_TITLES[idx]
-    structures = [
-        [
-            {"label": "钩子 18%", "w": 18, "bg": "#c3ed5a", "fg": "#1a2414", "legend": "0–3s 钩子"},
-            {"label": "痛点 27%", "w": 27, "bg": "#1f6b4e", "fg": "#fff", "legend": "3–12s 痛点"},
-            {"label": "方法 38%", "w": 38, "bg": "#9cc7b3", "fg": "", "legend": "12–45s 方法"},
-            {"label": "CTA 17%", "w": 17, "bg": "#e2592f", "fg": "#fff", "legend": "45–58s CTA"},
-        ],
-        [
-            {"label": "钩子 15%", "w": 15, "bg": "#c3ed5a", "fg": "#1a2414", "legend": "0–3s 对比"},
-            {"label": "落差 25%", "w": 25, "bg": "#1f6b4e", "fg": "#fff", "legend": "3–12s 落差"},
-            {"label": "拆解 42%", "w": 42, "bg": "#9cc7b3", "fg": "", "legend": "12–45s 拆解"},
-            {"label": "CTA 18%", "w": 18, "bg": "#e2592f", "fg": "#fff", "legend": "45–58s CTA"},
-        ],
-    ]
-    dims = [
-        {
-            "hook": "结果前置 + 身份代入",
-            "hook_note": "第一句先给结果，第二句绑定「打工人」身份。",
-            "emotion": "职场焦虑 → 掌控感",
-            "emotion_note": "先承认被工作追着跑，再给出可控的小胜利。",
-            "structure": "痛点 → 反常识 → 方法 → 结果",
-            "structure_note": "每个段落只承担一个叙事任务，信息密度高。",
-            "visual": "大字幕 + 桌面实拍",
-            "visual_note": "关键结果用全屏大字卡停顿 0.8 秒，强化记忆。",
-            "cta": "评论区领模板",
-            "cta_note": "用「整理好了」替代「点赞关注」，降低反感。",
-            "formula": "可复用公式：<b>结果前置</b> → 真实实验 → 反常识转折 → 可复用清单 → 低门槛 CTA。",
-        },
-        {
-            "hook": "身份对比 + 数字锚点",
-            "hook_note": "「8000」和「3 万」同时出现，制造即时落差。",
-            "emotion": "不公平感 → 希望",
-            "emotion_note": "先让观众代入委屈，再给出可复制的路径。",
-            "structure": "对比 → 归因 → 方法 → 结果",
-            "structure_note": "用两份真实周报做视觉证据。",
-            "visual": "双屏对比 + 工资条",
-            "visual_note": "左右分屏，关键差异用红框圈出。",
-            "cta": "评论区领模板",
-            "cta_note": "把「你怎么看」换成「要不要模板」，转化更直接。",
-            "formula": "可复用公式：<b>身份对比</b> → 数据落差 → 结构拆解 → 模板交付。",
-        },
-    ]
+    base = None
+    for h in HIT_POOL:
+        if h["id"] == hit_id:
+            base = h
+            break
+    if base is None:
+        base = _IMPORTED_HITS.get(hit_id)
+        if base is None:
+            return None
+        return dict(base)
+
+    idx = HIT_POOL.index(base)
+    rnd = _seed_rand(hit_id)
+    plays_pct = rnd.choice(["38.2%", "42.6%", "35.8%", "40.1%", "44.3%", "37.4%"])
+    retention = rnd.choice(["62.4%", "71.3%", "58.9%", "66.7%", "74.8%", "63.1%"])
+    share = rnd.choice(["4.8%", "6.2%", "9.4%", "5.3%", "3.9%", "11.2%"])
+    dims = _DIM_PRESETS[idx % len(_DIM_PRESETS)]
     return {
-        "id": hit_id,
-        "title": title,
+        "id": base["id"],
+        "title": base["title"],
         "meta": [
-            {"type": "green", "text": f"完播率 {random.choice(['38.2%', '42.6%', '35.8%', '40.1%', '44.3%', '37.4%'])}"},
-            {"type": "", "text": f"3 秒留存 {random.choice(['62.4%', '71.3%', '58.9%', '66.7%', '74.8%', '63.1%'])}"},
-            {"type": "", "text": f"分享率 {random.choice(['4.8%', '6.2%', '9.4%', '5.3%', '3.9%', '11.2%'])}"},
+            {"type": "green", "text": f"完播率 {plays_pct}"},
+            {"type": "", "text": f"3 秒留存 {retention}"},
+            {"type": "", "text": f"分享率 {share}"},
         ],
-        "dims": dims[idx % len(dims)],
-        "formula": dims[idx % len(dims)]["formula"],
-        "structure": structures[idx % len(structures)],
-        "graph": {
-            "topic": random.choice(["30 天实验", "周报对比", "180 天记录", "模板清单", "拒绝 offer", "减法清单"]),
-            "identity": random.choice(["一人公司", "打工人", "个人 IP", "职场人", "高薪职场人", "工具控"]),
-            "hook": random.choice(["结果前置", "身份对比", "时间节点", "痛点直击", "反常识", "减法数字"]),
-            "emotion": random.choice(["焦虑→释然", "落差→希望", "迷茫→笃定", "疲惫→解救", "羡慕→认同", "焦虑→清晰"]),
-            "visual": random.choice(["大字幕", "双屏对比", "日记实拍", "录屏大字卡", "真人白板", "桌面俯拍"]),
-            "rhythm": random.choice(["3 秒反转", "5 秒反转", "慢节奏", "3 秒切入", "算账节奏", "清单节奏"]),
-            "structure": random.choice(["痛点→方法", "对比→拆解", "时间线→清单", "痛点→方案", "悬念→观点", "总→分→总"]),
-            "cta": random.choice(["领模板", "领模板", "关注追更", "领模板", "开放提问", "收藏"]),
-            "core": random.choice(["328.4w", "612.8w", "186.2w", "241.6w", "98.4w", "154.2w"]),
-        },
+        "dims": dims,
+        "formula": dims["formula"],
+        "structure": _STRUCTURE_PRESETS[idx % len(_STRUCTURE_PRESETS)],
+        "graph": dict(_GRAPH_PRESETS[idx % len(_GRAPH_PRESETS)]),
     }
 
 
 def analyze_hit(url: str) -> dict:
-    title = url.split("/")[-1][:16] if url else "新导入爆款"
-    return {
-        "id": _random_id("h"),
-        "title": title or "AI 效率工具盘点 · 新导入爆款",
+    title = (url.split("/")[-1][:16] if url else "") or "AI 效率工具盘点 · 新导入爆款"
+    _IMPORT_SEQ["n"] += 1
+    result = {
+        "id": f"h_{9000 + _IMPORT_SEQ['n']}",
+        "title": title,
         "status": "analyzed",
         "progress": 100,
         "meta": [
@@ -475,6 +578,8 @@ def analyze_hit(url: str) -> dict:
             "structure": "问题→清单", "cta": "收藏关注", "core": "待验证",
         },
     }
+    _IMPORTED_HITS[result["id"]] = result
+    return result
 
 
 def generate_hit_recommendations(hit_id: str | None = None) -> dict:
