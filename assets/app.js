@@ -1191,16 +1191,19 @@
     if (pill) pill.textContent = count + ' 条生效';
   }
 
-  if (API.enabled()) {
-    API.get('/comments/rules').then(function (res) {
-      var saved = (res && res.rules) || [];
-      if (saved.length) {
+  function loadRules() {
+    API.check().then(function (ok) {
+      if (!ok) return;
+      API.get('/comments/rules').then(function (res) {
+        var saved = (res && res.rules) || [];
+        if (!saved.length) return;
         var list = $('#ruleList');
         if (list) list.innerHTML = '';
         saved.slice(0, 8).reverse().forEach(renderRuleRow);
-      }
-    }).catch(function () {});
+      }).catch(function () {});
+    });
   }
+  loadRules();
 
   // 评论洞察：进入页面时用 AI 提炼一次
   var signalsLoaded = false;
@@ -2208,6 +2211,133 @@
       resetGraph();
     }
   });
+
+  /* ---------------- 账号与多设备同步 ---------------- */
+  var accountUser = null;
+  var accountMode = 'login';
+
+  function renderAccount() {
+    var guest = $('#accountGuest');
+    var userBox = $('#accountUser');
+    if (!guest || !userBox) return;
+    var submit = $('#accountSubmit');
+    var logout = $('#accountLogout');
+    var toggle = $('#accountToggle');
+    var name = $('#accountName');
+    var status = $('#accountStatus');
+    var avatar = $('#accountAvatar');
+    var emailShow = $('#accountEmailShow');
+    var hint = $('#accountHint');
+
+    if (accountUser) {
+      guest.style.display = 'none';
+      userBox.style.display = '';
+      submit.style.display = 'none';
+      toggle.style.display = 'none';
+      logout.style.display = '';
+      if (emailShow) emailShow.textContent = accountUser.email;
+      if (name) name.textContent = accountUser.email.split('@')[0];
+      if (status) status.textContent = '已登录 · 跨设备同步';
+      if (avatar) avatar.textContent = accountUser.email.charAt(0).toUpperCase();
+      if (hint) hint.textContent = '收藏、规则与草稿已按账号保存，换设备登录即可同步';
+    } else {
+      guest.style.display = '';
+      userBox.style.display = 'none';
+      submit.style.display = '';
+      toggle.style.display = '';
+      logout.style.display = 'none';
+      if (name) name.textContent = '林序';
+      if (status) status.textContent = '未登录 · 点击同步';
+      if (avatar) avatar.textContent = '林';
+      if (hint) hint.textContent = '登录后，收藏、规则与草稿会跟随账号同步';
+      setAccountMode(accountMode);
+    }
+  }
+
+  function setAccountMode(mode) {
+    accountMode = mode === 'register' ? 'register' : 'login';
+    var submit = $('#accountSubmit');
+    var toggle = $('#accountToggle');
+    if (!submit) return;
+    submit.textContent = accountMode === 'register' ? '注册并登录' : '登录';
+    if (toggle) toggle.textContent = accountMode === 'register' ? '已有账号？去登录' : '没有账号？去注册';
+    var pwd = $('#accountPassword');
+    if (pwd) {
+      pwd.setAttribute('autocomplete', accountMode === 'register' ? 'new-password' : 'current-password');
+    }
+  }
+
+  function loadAccount() {
+    API.check().then(function (ok) {
+      if (!ok) { renderAccount(); return; }
+      API.get('/auth/me').then(function (res) {
+        accountUser = res && res.user ? res.user : null;
+        renderAccount();
+      }).catch(function () { renderAccount(); });
+    });
+  }
+
+  function afterAuthChange() {
+    topicsSynced = false;
+    signalsLoaded = false;
+    var list = $('#ruleList');
+    if (list) list.innerHTML = '';
+    loadRules();
+    if ($('#page-topics') && $('#page-topics').classList.contains('active')) filterTopics('all');
+    if ($('#page-comments') && $('#page-comments').classList.contains('active')) loadSignals();
+  }
+
+  if ($('#accountSubmit')) {
+    $('#accountSubmit').addEventListener('click', function () {
+      var email = ($('#accountEmail') || {}).value || '';
+      var password = ($('#accountPassword') || {}).value || '';
+      if (!email.trim()) { toast('请输入邮箱'); return; }
+      if (password.length < 8) { toast('密码至少 8 位'); return; }
+      API.check().then(function (ok) {
+        if (!ok) { toast('账号服务未连接，请稍后重试'); return; }
+        var btn = $('#accountSubmit');
+        var path = accountMode === 'register' ? '/auth/register' : '/auth/login';
+        btn.disabled = true;
+        API.post(path, { email: email.trim(), password: password }).then(function (res) {
+          btn.disabled = false;
+          if (!res || !res.user) {
+            toast((res && res.detail) || '操作失败，请检查邮箱与密码');
+            return;
+          }
+          accountUser = res.user;
+          renderAccount();
+          closeModals();
+          afterAuthChange();
+          var pwd = $('#accountPassword');
+          if (pwd) pwd.value = '';
+          toast(accountMode === 'register' ? '注册成功 · 已开启跨设备同步' : '已登录 · 数据开始跨设备同步');
+        }).catch(function () {
+          btn.disabled = false;
+          toast('网络异常，请稍后重试');
+        });
+      });
+    });
+  }
+
+  if ($('#accountToggle')) {
+    $('#accountToggle').addEventListener('click', function () {
+      setAccountMode(accountMode === 'register' ? 'login' : 'register');
+    });
+  }
+
+  if ($('#accountLogout')) {
+    $('#accountLogout').addEventListener('click', function () {
+      API.post('/auth/logout', {}).then(function () {
+        accountUser = null;
+        renderAccount();
+        closeModals();
+        afterAuthChange();
+        toast('已退出登录 · 当前设备数据单独保存');
+      }).catch(function () { toast('退出失败，请稍后重试'); });
+    });
+  }
+
+  loadAccount();
 
   /* ---------------- 初始状态 ---------------- */
   resetGraph();

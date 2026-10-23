@@ -7,17 +7,74 @@ import hashlib
 import html
 import json
 import re
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
-from api import ai_client, mock_data, store
+from api import ai_client, auth, mock_data, store
 
 router = APIRouter(prefix="/api")
+
+
+def _secure_cookie(request: Request) -> bool:
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").startswith("https")
+
+
+def current_user(request: Request) -> Optional[dict]:
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    if not token:
+        return None
+    return store.get_session_user(auth.token_hash(token))
+
+
+def owner_of(request: Request, response: Response) -> str:
+    """登录用户按账号隔离；未登录时按设备 Cookie 隔离，避免不同访客互相看到数据。"""
+    user = current_user(request)
+    if user:
+        return user["id"]
+    device = request.cookies.get(auth.DEVICE_COOKIE)
+    if not device:
+        device = auth.new_device_id()
+        response.set_cookie(
+            auth.DEVICE_COOKIE, device, max_age=365 * 24 * 3600,
+            httponly=True, samesite="lax", secure=_secure_cookie(request), path="/",
+        )
+    return device
+
+
+def _start_session(user_id: str, request: Request, response: Response) -> None:
+    token = auth.new_token()
+    store.create_session(auth.token_hash(token), user_id, auth.SESSION_DAYS)
+    response.set_cookie(
+        auth.SESSION_COOKIE, token, max_age=auth.SESSION_DAYS * 24 * 3600,
+        httponly=True, samesite="lax", secure=_secure_cookie(request), path="/",
+    )
+
+
+# 简单的登录频率限制（内存计数，实例重启即清空）
+_LOGIN_WINDOW = 600
+_LOGIN_LIMIT = 10
+_login_hits: dict[str, list[float]] = {}
+
+
+def _check_login_rate(key: str) -> None:
+    now = time.time()
+    hits = [t for t in _login_hits.get(key, []) if now - t < _LOGIN_WINDOW]
+    if len(hits) >= _LOGIN_LIMIT:
+        _login_hits[key] = hits
+        raise HTTPException(status_code=429, detail="尝试过于频繁，请 10 分钟后再试")
+    hits.append(now)
+    _login_hits[key] = hits
+
+
+class AuthRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=120)
+    password: str = Field(..., min_length=8, max_length=128)
 
 
 class DraftRequest(BaseModel):
@@ -75,6 +132,49 @@ class RecommendationRequest(BaseModel):
 @router.get("/health")
 def health():
     return mock_data.health()
+
+
+# ---------- auth ----------
+@router.post("/auth/register")
+def auth_register(req: AuthRequest, request: Request, response: Response):
+    email = auth.normalize_email(req.email)
+    if not auth.valid_email(email):
+        raise HTTPException(status_code=400, detail="邮箱格式不正确")
+    if not auth.valid_password(req.password):
+        raise HTTPException(status_code=400, detail="密码至少 8 位")
+    _check_login_rate("reg:" + email)
+    if store.get_user_by_email(email):
+        raise HTTPException(status_code=409, detail="该邮箱已注册，请直接登录")
+    user = store.create_user(auth.new_user_id(), email, auth.hash_password(req.password))
+    _start_session(user["id"], request, response)
+    return {"success": True, "user": user}
+
+
+@router.post("/auth/login")
+def auth_login(req: AuthRequest, request: Request, response: Response):
+    email = auth.normalize_email(req.email)
+    _check_login_rate("login:" + email)
+    user = store.get_user_by_email(email)
+    if not user or not auth.verify_password(req.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="邮箱或密码不正确")
+    store.purge_expired_sessions()
+    _start_session(user["id"], request, response)
+    return {"success": True, "user": {"id": user["id"], "email": user["email"]}}
+
+
+@router.post("/auth/logout")
+def auth_logout(request: Request, response: Response):
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    if token:
+        store.delete_session(auth.token_hash(token))
+    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return {"success": True}
+
+
+@router.get("/auth/me")
+def auth_me(request: Request):
+    user = current_user(request)
+    return {"user": user, "anonymous": user is None}
 
 
 # ---------- topics ----------
@@ -191,23 +291,23 @@ def hot_import(req: HotImportRequest):
 
 
 @router.get("/topics/saved")
-def saved_topics():
-    rows = store.list_saved_topics()
+def saved_topics(owner: str = Depends(owner_of)):
+    rows = store.list_saved_topics(owner)
     return {"total": len(rows), "topics": rows}
 
 
 @router.post("/topics/{topic_id}/save")
-def save_topic(topic_id: str):
+def save_topic(topic_id: str, owner: str = Depends(owner_of)):
     detail = mock_data.generate_topic_detail(topic_id) or _HOT_ITEMS.get(topic_id)
     if not detail:
         raise HTTPException(status_code=404, detail="topic not found")
-    row = store.save_topic(topic_id, detail["title"])
+    row = store.save_topic(owner, topic_id, detail["title"])
     return {"success": True, "saved": row}
 
 
 @router.delete("/topics/{topic_id}/save")
-def unsave_topic(topic_id: str):
-    removed = store.delete_saved_topic(topic_id)
+def unsave_topic(topic_id: str, owner: str = Depends(owner_of)):
+    removed = store.delete_saved_topic(owner, topic_id)
     return {"success": removed}
 
 
@@ -242,7 +342,7 @@ def topic_detail(topic_id: str):
 
 
 @router.post("/draft")
-async def draft(req: DraftRequest):
+async def draft(req: DraftRequest, owner: str = Depends(owner_of)):
     topic = mock_data.generate_topic_detail(req.topicId) or {}
     title = topic.get("title", "")
     audience = topic.get("audience", "个人创作者")
@@ -269,7 +369,7 @@ async def draft(req: DraftRequest):
     content = text or mock_data.generate_draft(req.topicId, req.type)
     model = ai_client.LAST["model"] if text else "mock"
     try:
-        store.save_draft(req.topicId, req.type, model, content)
+        store.save_draft(owner, req.topicId, req.type, model, content)
     except Exception:
         pass  # 草稿保存失败不影响返回
 
@@ -344,14 +444,14 @@ def comments(filter: str = Query("all", pattern="^(all|good|need|emotion|bad)$")
 
 
 @router.get("/comments/rules")
-def list_rules():
-    return {"rules": store.list_rules()}
+def list_rules(owner: str = Depends(owner_of)):
+    return {"rules": store.list_rules(owner)}
 
 
 @router.post("/comments/rules")
-def add_rule(req: RuleRequest):
+def add_rule(req: RuleRequest, owner: str = Depends(owner_of)):
     rule = mock_data.add_comment_rule(req.keyword, req.category)
-    saved = store.add_rule(rule)
+    saved = store.add_rule(owner, rule)
     return {"success": True, "rule": saved}
 
 
@@ -384,10 +484,11 @@ async def comment_insights():
 
 # ---------- hits ----------
 @router.get("/hits")
-def hits(kind: str = Query("all", pattern="^(all|saved|analyzed)$")):
+def hits(kind: str = Query("all", pattern="^(all|saved|analyzed)$"), owner: str = Depends(owner_of)):
     rows = mock_data.generate_hits(kind)
     known = {h["id"] for h in rows}
-    for item in store.list_imported_hits():
+    imported = store.list_imported_hits(owner)
+    for item in imported:
         if item["id"] in known or kind == "saved":
             continue
         rows.append({"id": item["id"], "idx": "NEW", "title": item["title"],
@@ -396,16 +497,16 @@ def hits(kind: str = Query("all", pattern="^(all|saved|analyzed)$")):
     return {
         "kind": kind,
         "total": 126,
-        "stats": {"saved": 86, "analyzed": 42 + len(store.list_imported_hits())},
+        "stats": {"saved": 86, "analyzed": 42 + len(imported)},
         "hits": rows,
     }
 
 
 @router.get("/hits/{hit_id}")
-def hit_detail(hit_id: str):
+def hit_detail(hit_id: str, owner: str = Depends(owner_of)):
     detail = mock_data.generate_hit_detail(hit_id)
     if not detail:
-        for item in store.list_imported_hits():
+        for item in store.list_imported_hits(owner):
             if item["id"] == hit_id:
                 detail = item
                 break
@@ -415,10 +516,10 @@ def hit_detail(hit_id: str):
 
 
 @router.post("/hits/analyze")
-def hit_analyze(req: HitAnalyzeRequest):
+def hit_analyze(req: HitAnalyzeRequest, owner: str = Depends(owner_of)):
     hit = mock_data.analyze_hit(req.url)
     try:
-        store.save_imported_hit(hit)
+        store.save_imported_hit(owner, hit)
     except Exception:
         pass
     return {"success": True, "hit": hit}

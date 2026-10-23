@@ -26,9 +26,19 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
+_cors_env = os.getenv("CORS_ORIGINS", "")
+if _cors_env.strip():
+    _allow_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+else:
+    # 默认只放开本地调试端口；线上同源部署，不需要额外放行
+    _allow_origins = [
+        "http://localhost:8000", "http://127.0.0.1:8000",
+        "http://localhost:8001", "http://127.0.0.1:8001",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

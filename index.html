@@ -8,7 +8,7 @@
   <title>Creator OS · 自媒体 AI 创作工作台</title>
   <meta name="description" content="Creator OS —— 让每一次创作，都为下一次增长的起点。整合赛道分析、智能选题、评论洞察、爆款知识库与商业变现的自媒体 AI 工作台。">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23171a17'/%3E%3Ccircle cx='15' cy='17' r='6' fill='none' stroke='%23d5f27e' stroke-width='2.4'/%3E%3Ccircle cx='21' cy='11' r='2' fill='%23d5f27e'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./assets/style.css?v=5">
+  <link rel="stylesheet" href="./assets/style.css?v=6">
 </head>
 <body>
   <!-- 图标库 -->
@@ -113,11 +113,11 @@
       <button class="btn-checkin" id="sideCheckin"><svg width="12" height="12"><use href="#i-zap"/></svg> 今日签到 +10</button>
     </div>
 
-    <div class="side-profile">
-      <div class="avatar">林</div>
+    <div class="side-profile" data-open="account" style="cursor:pointer">
+      <div class="avatar" id="accountAvatar">林</div>
       <div class="profile-meta">
-        <div class="profile-name">林序</div>
-        <button class="profile-plan" data-open="pricing" style="color:#8f988b">免费版 · 升级解锁 Pro</button>
+        <div class="profile-name" id="accountName">林序</div>
+        <button class="profile-plan" id="accountStatus" data-open="account" style="color:#8f988b">未登录 · 点击同步</button>
       </div>
       <button class="profile-gear" data-open="ai" title="AI 与数据设置"><svg width="16" height="16"><use href="#i-settings"/></svg></button>
     </div>
@@ -141,7 +141,7 @@
       <button class="icon-btn" data-open="help" title="新手引导与帮助"><svg width="17" height="17"><use href="#i-help"/></svg></button>
       <button class="icon-btn" data-open="notifications" title="通知"><svg width="17" height="17"><use href="#i-bell"/></svg><span class="dot"></span></button>
       <button class="btn btn-lime btn-sm" data-open="pricing" style="height:30px">升级 Pro</button>
-      <div class="avatar topbar-avatar" title="林序 · 免费版">林</div>
+      <div class="avatar topbar-avatar" data-open="account" title="账号与多设备同步" style="cursor:pointer">林</div>
     </header>
 
     <main class="main">
@@ -1857,6 +1857,53 @@
     </div>
   </div>
 
+  <!-- ========== 账号与同步 ========== -->
+  <div class="modal" id="accountModal">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-panel sm">
+      <div class="modal-head">
+        <div><h3>账号与多设备同步</h3><p id="accountHint">登录后，收藏、规则与草稿会跟随账号同步</p></div>
+        <button class="close-btn" data-close><svg width="16" height="16"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div id="accountGuest">
+          <div class="field">
+            <div class="field-label"><span>邮箱</span><em>必填</em></div>
+            <input class="input" id="accountEmail" type="email" placeholder="you@example.com" autocomplete="email">
+          </div>
+          <div class="field" style="margin-top:12px">
+            <div class="field-label"><span>密码</span><em>至少 8 位</em></div>
+            <input class="input" id="accountPassword" type="password" placeholder="至少 8 位字符" autocomplete="current-password">
+          </div>
+          <div class="privacy-note" style="margin-top:12px">
+            <svg width="12" height="12"><use href="#i-lock"/></svg>
+            <span>密码经加盐哈希后存储，不会明文保存；不登录也能继续使用，数据保存在当前设备。</span>
+          </div>
+        </div>
+        <div id="accountUser" style="display:none">
+          <div class="logic-step" style="padding:8px 0">
+            <div class="logic-num">01</div>
+            <div><b id="accountEmailShow">—</b><p>当前账号，数据已按账号保存</p></div>
+          </div>
+          <div class="logic-step" style="padding:8px 0">
+            <div class="logic-num">02</div>
+            <div><b>多设备同步</b><p>在另一台设备用同一邮箱登录，即可看到同一份收藏、规则与草稿</p></div>
+          </div>
+          <div class="privacy-note" style="margin-top:12px">
+            <svg width="12" height="12"><use href="#i-lock"/></svg>
+            <span>会话有效期 30 天，退出登录会立即失效。</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" data-close>关闭</button>
+        <button class="btn btn-ghost" id="accountToggle">没有账号？去注册</button>
+        <button class="btn btn-primary" id="accountSubmit">登录</button>
+        <button class="btn btn-ghost" id="accountLogout" style="display:none">退出登录</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== 导入热点 ========== -->
   <div class="modal" id="hotimportModal">
     <div class="modal-backdrop" data-close></div>
@@ -1976,7 +2023,7 @@
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
   <script src="./_shared/js/echarts.min.js"></script>
-  <script src="./assets/charts.js?v=5"></script>
-  <script src="./assets/app.js?v=5"></script>
+  <script src="./assets/charts.js?v=6"></script>
+  <script src="./assets/app.js?v=6"></script>
 </body>
 </html>
