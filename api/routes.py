@@ -90,7 +90,7 @@ def _hot_topic_from_title(title: str, origin: str) -> dict:
         "id": tid,
         "rank": "HOT",
         "title": clean,
-        "source": "抖音热榜",
+        "source": "抖音热榜" if origin in _RSS_ORIGINS else "热点导入",
         "origin": origin,
         "audience": "关注热点的泛内容人群",
         "competition": "竞争 中",
@@ -148,6 +148,7 @@ RSS_FEEDS = [
     ("少数派", "https://sspai.com/feed"),
     ("虎嗅", "https://www.huxiu.com/rss/0.xml"),
 ]
+_RSS_ORIGINS = {name for name, _ in RSS_FEEDS}
 
 
 @router.post("/hot/refresh")
@@ -220,7 +221,7 @@ def topics(
     internal_source = source_map.get(source, "all")
     rows = mock_data.generate_topics(internal_source, refresh=bool(refresh))
     if source in ("all", "douyin"):
-        rows = rows[:5] + list(_HOT_ITEMS.values())[:3]
+        rows = rows[:5] + list(_HOT_ITEMS.values())[-3:]
     return {
         "source": source,
         "refresh": bool(refresh),

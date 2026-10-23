@@ -8,7 +8,7 @@
   <title>Creator OS · 自媒体 AI 创作工作台</title>
   <meta name="description" content="Creator OS —— 让每一次创作，都为下一次增长的起点。整合赛道分析、智能选题、评论洞察、爆款知识库与商业变现的自媒体 AI 工作台。">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23171a17'/%3E%3Ccircle cx='15' cy='17' r='6' fill='none' stroke='%23d5f27e' stroke-width='2.4'/%3E%3Ccircle cx='21' cy='11' r='2' fill='%23d5f27e'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./assets/style.css?v=3">
+  <link rel="stylesheet" href="./assets/style.css?v=4">
 </head>
 <body>
   <!-- 图标库 -->
@@ -625,6 +625,7 @@
           </div>
           <div class="page-actions">
             <span class="pill"><svg width="11" height="11"><use href="#i-calendar"/></svg> 10.22 周四</span>
+            <button class="btn btn-ghost btn-sm" data-open="hotimport"><svg width="12" height="12"><use href="#i-upload"/></svg> 导入热点</button>
             <button class="btn btn-ghost btn-sm" id="refreshTopics"><svg width="12" height="12"><use href="#i-refresh"/></svg> 刷新热点</button>
             <button class="btn btn-primary btn-sm" id="openDraftTop"><svg width="13" height="13"><use href="#i-spark"/></svg> 生成初稿</button>
           </div>
@@ -643,6 +644,7 @@
             <button data-source="抖音热榜">抖音热榜 <span class="n">8</span></button>
             <button data-source="同赛道爆款">同赛道爆款 <span class="n">6</span></button>
             <button data-source="搜索趋势">搜索趋势 <span class="n">4</span></button>
+            <button data-source="我的收藏">我的收藏 <span class="n">★</span></button>
           </div>
           <div class="sync-time"><span class="live" style="width:5px;height:5px;border-radius:50%;background:#1f6b4e"></span><span id="syncTime">12 分钟前更新 · 抖音热榜 / 创作灵感</span></div>
         </div>
@@ -1855,7 +1857,35 @@
     </div>
   </div>
 
-  <!-- ========== 导入拆解 ========== -->
+  <!-- ========== 导入热点 ========== -->
+  <div class="modal" id="hotimportModal">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-panel sm">
+      <div class="modal-head">
+        <div><h3>导入热点</h3><p>每行一条标题，最少 6 个字 · 最多 20 条</p></div>
+        <button class="close-btn" data-close><svg width="16" height="16"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-label"><span>热点标题</span><em>必填</em></div>
+          <textarea class="input" id="hotImportText" rows="6" placeholder="例如：&#10;AI 会议纪要工具横评：5 款主流产品实测&#10;打工人的周报焦虑，正在被 AI 重新定义"></textarea>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <div class="field-label"><span>来源标注</span><em>可选</em></div>
+          <input class="input" id="hotImportSource" placeholder="例如：抖音热榜 / 行业群 / 竞品账号">
+        </div>
+        <div class="privacy-note" style="margin-top:12px">
+          <svg width="12" height="12"><use href="#i-lock"/></svg>
+          <span>导入内容只保存在你自己的工作台，用于生成选题候选。</span>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" data-close>取消</button>
+        <button class="btn btn-primary" id="hotImportStart"><svg width="12" height="12"><use href="#i-plus"/></svg> 加入今日候选</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="importModal">
     <div class="modal-backdrop" data-close></div>
     <div class="modal-panel sm">
@@ -1946,7 +1976,7 @@
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
   <script src="./_shared/js/echarts.min.js"></script>
-  <script src="./assets/charts.js?v=3"></script>
-  <script src="./assets/app.js?v=3"></script>
+  <script src="./assets/charts.js?v=4"></script>
+  <script src="./assets/app.js?v=4"></script>
 </body>
 </html>

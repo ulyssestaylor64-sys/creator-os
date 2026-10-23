@@ -648,7 +648,7 @@
   }
 
   function buildTopicItem(t, idx) {
-    var sourceMap = { '抖音热榜': 'orange', '同赛道爆款': 'green', '搜索趋势': 'blue', '创作灵感': '' };
+    var sourceMap = { '抖音热榜': 'orange', '同赛道爆款': 'green', '搜索趋势': 'blue', '创作灵感': '', '热点导入': 'lime', '我的收藏': 'lime' };
     var pillClass = sourceMap[t.source] || '';
     return '<article class="topic-item' + (idx === 0 ? ' active' : '') + '" data-topic="' + idx + '" data-source="' + esc(t.source) + '" tabindex="0">' +
       '<div class="topic-rank">' + (t.rank || ('0' + (idx + 1)).slice(-2)) + '</div>' +
@@ -689,6 +689,33 @@
   }
 
   function filterTopics(source) {
+    if (source === '我的收藏') {
+      if (!API.enabled()) { toast('收藏列表需要连接后端后才能查看'); return; }
+      API.get('/topics/saved').then(function (res) {
+        var rows = (res && res.topics) || [];
+        if (!rows.length) {
+          var list = $('#topicList');
+          if (list) list.innerHTML = '<div style="padding:28px 18px;text-align:center;color:var(--faint);font-size:11px;line-height:1.7">还没有收藏的选题<br>在选题详情里点「收藏到选题库」即可加入</div>';
+          toast('还没有收藏的选题');
+          return;
+        }
+        rebuildTopicList(rows.map(function (r) {
+          return {
+            id: r.topic_id,
+            rank: '★',
+            title: r.title,
+            desc: r.note || ('收藏于 ' + String(r.saved_at || '').replace('T', ' ').slice(0, 16)),
+            source: '我的收藏',
+            match: 90,
+            competition: '已收藏',
+            heat: '★',
+            rise: '收藏'
+          };
+        }));
+        selectTopic(0);
+      }).catch(function () { toast('收藏列表加载失败'); });
+      return;
+    }
     if (API.enabled()) {
       var apiSource = source === '抖音热榜' ? 'douyin' : source === '同赛道爆款' ? 'niche' : source === '搜索趋势' ? 'search' : 'all';
       API.get('/topics', { source: apiSource }).then(function (res) {
@@ -752,6 +779,38 @@
           toast('热点已刷新 · 新增 6 条高匹配选题');
         }, 550);
       }
+    });
+  }
+
+  if ($('#hotImportStart')) {
+    $('#hotImportStart').addEventListener('click', function () {
+      var textEl = $('#hotImportText');
+      var srcEl = $('#hotImportSource');
+      var text = (textEl && textEl.value) || '';
+      if (!text.trim()) { toast('请先粘贴至少一条热点标题'); return; }
+      if (!API.enabled()) { toast('导入需要连接后端后才能使用'); return; }
+      var btn = $('#hotImportStart');
+      btn.disabled = true;
+      API.post('/hot/import', {
+        text: text,
+        source: (srcEl && srcEl.value.trim()) || '手动导入'
+      }).then(function (res) {
+        btn.disabled = false;
+        if (!res || !res.success) { toast('没有识别到有效标题（每行至少 6 个字）'); return; }
+        closeModals();
+        if (textEl) textEl.value = '';
+        if (srcEl) srcEl.value = '';
+        API.get('/topics', { source: 'all' }).then(function (list) {
+          rebuildTopicList(list.topics);
+          selectTopic(0);
+        });
+        var sync = $('#syncTime');
+        if (sync) sync.textContent = '刚刚更新 · 手动导入 ' + res.count + ' 条';
+        toast('已导入 ' + res.count + ' 条热点到今日候选');
+      }).catch(function () {
+        btn.disabled = false;
+        toast('导入失败，请稍后重试');
+      });
     });
   }
 
