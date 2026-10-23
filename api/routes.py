@@ -292,7 +292,7 @@ def hot_import(req: HotImportRequest):
 
 @router.get("/topics/saved")
 def saved_topics(owner: str = Depends(owner_of)):
-    rows = store.list_saved_topics(owner)
+    rows = [{k: v for k, v in r.items() if k != "user_id"} for r in store.list_saved_topics(owner)]
     return {"total": len(rows), "topics": rows}
 
 
@@ -445,7 +445,8 @@ def comments(filter: str = Query("all", pattern="^(all|good|need|emotion|bad)$")
 
 @router.get("/comments/rules")
 def list_rules(owner: str = Depends(owner_of)):
-    return {"rules": store.list_rules(owner)}
+    rows = [{k: v for k, v in r.items() if k != "user_id"} for r in store.list_rules(owner)]
+    return {"rules": rows}
 
 
 @router.post("/comments/rules")
