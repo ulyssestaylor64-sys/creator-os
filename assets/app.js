@@ -1087,7 +1087,8 @@
   if ($('#applyStructure')) {
     $('#applyStructure').addEventListener('click', function () {
       go('topics');
-      setTimeout(function () { toast('已把「结果前置」结构应用到今日选题'); }, 220);
+      selectTopic(0);
+      setTimeout(function () { openDraft(); toast('已把爆款结构应用到当前选题 · 可一键生成初稿'); }, 260);
     });
   }
 
@@ -1119,6 +1120,39 @@
     });
   }
 
+  function addImportedHit(rawTitle) {
+    var idx = hitData.length;
+    var title = rawTitle || 'AI 效率工具盘点 · 新导入爆款';
+    var short = title.length > 22 ? title.slice(0, 22) + '…' : title;
+    hitData.push({
+      title: title,
+      meta: [['green', '完播率 36.5%'], ['', '3 秒留存 59.2%'], ['', '收藏率 7.8%']],
+      dims: {
+        hook: '<b>痛点提问 + 数字</b><br>先用一个高频问题抓住注意力。',
+        emotion: '<b>焦虑 → 清晰</b><br>让观众从信息过载中感到被解救。',
+        structure: '<b>问题 → 答案 → 清单</b><br>结构简单，降低理解成本。',
+        visual: '<b>桌面实拍 + 大字卡</b><br>关键工具用大字卡停留 1 秒。',
+        cta: '<b>收藏 + 关注</b><br>引导收藏，符合工具类内容行为。'
+      },
+      formula: '可复用公式：<b>痛点提问</b> → 数字锚点 → 3 个答案 → 收藏关注。',
+      structure: [
+        { label: '钩子 18%', w: 18, bg: '#c3ed5a', fg: '#1a2414', legend: '0–3s 提问' },
+        { label: '答案 22%', w: 22, bg: '#1f6b4e', fg: '#fff', legend: '3–12s 答案' },
+        { label: '清单 48%', w: 48, bg: '#9cc7b3', fg: '', legend: '12–50s 清单' },
+        { label: 'CTA 12%', w: 12, bg: '#e2592f', fg: '#fff', legend: '50–58s 收藏' }
+      ]
+    });
+    hitGraphs.push({ topic: '新导入', identity: '创作者', hook: '痛点提问', emotion: '焦虑→清晰', visual: '桌面实拍', rhythm: '清单节奏', structure: '问题→清单', cta: '收藏关注', core: '待验证' });
+    var article = D.createElement('article');
+    article.className = 'hit-card';
+    article.dataset.hit = String(idx);
+    article.dataset.kind = 'analyzed';
+    article.innerHTML = '<div class="hit-cover hc6"><span class="idx">0' + (idx + 1) + '</span><span class="tag-abs">已拆解</span><span class="metric">导入作品 · 待验证</span></div><div class="hit-info"><div class="hit-title">' + esc(short) + '</div><div class="hit-meta"><span class="pill lime">导入</span><span class="pill">AI 自动拆解</span></div></div>';
+    if (hitGrid) hitGrid.appendChild(article);
+    selectHit(idx);
+    go('library');
+  }
+
   if ($('#importStart')) {
     $('#importStart').addEventListener('click', function () {
       var link = $('#importLink').value.trim();
@@ -1129,7 +1163,10 @@
       }
       closeModals();
       toast('已开始 6 维拉片 · 预计 30 秒完成');
-      setTimeout(function () { toast('拆解完成，已加入你的爆款知识库'); }, 1800);
+      setTimeout(function () {
+        addImportedHit(link || '示例视频 · AI 会议纪要工作流');
+        toast('拆解完成，已加入你的爆款知识库');
+      }, 1500);
     });
   }
 
@@ -1152,6 +1189,10 @@
 
   if ($('#syncBrands')) {
     $('#syncBrands').addEventListener('click', function () {
+      var counts = [2, 3, 1, 4];
+      $$('.pipeline .pipe-head span').forEach(function (el, i) {
+        el.textContent = counts[i] || el.textContent;
+      });
       toast('品牌库已同步 · 新增 3 个匹配品牌');
     });
   }
@@ -1166,11 +1207,20 @@
     });
   });
 
+  D.addEventListener('click', function (e) {
+    var card = e.target.closest('.pipe-card');
+    if (!card) return;
+    var brand = $('.pipe-brand b', card);
+    toast('已打开「' + (brand ? brand.textContent : '品牌') + '」合作详情');
+  });
+
   if ($('#publishPortfolio')) {
     $('#publishPortfolio').addEventListener('click', function () {
       var modal = $('#portfolioModal');
       var left = $('.modal-foot .left', modal);
       if (left) left.textContent = '最后更新 · 刚刚';
+      var link = 'https://ulyssestaylor64-sys.github.io/creator-os/portfolio?u=linxu';
+      copyText(link, '作品集链接已复制');
       toast('作品集已发布 · 旧链接自动失效');
     });
   }
