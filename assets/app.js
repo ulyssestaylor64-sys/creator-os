@@ -814,6 +814,17 @@
     });
   }
 
+  // 首次进入选题页时用后端数据覆盖静态占位，避免热榜/收藏与首屏不同源
+  var topicsSynced = false;
+  window.addEventListener('creator:page', function (e) {
+    if (e.detail.page !== 'topics' || topicsSynced) return;
+    API.check().then(function (ok) {
+      if (!ok || topicsSynced) return;
+      topicsSynced = true;
+      filterTopics('all');
+    });
+  });
+
   if ($('#detailTabs')) {
     $('#detailTabs').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-detail-tab]');

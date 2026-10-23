@@ -221,7 +221,7 @@ def topics(
     internal_source = source_map.get(source, "all")
     rows = mock_data.generate_topics(internal_source, refresh=bool(refresh))
     if source in ("all", "douyin"):
-        rows = rows[:5] + list(_HOT_ITEMS.values())[-3:]
+        rows = rows[:6] + list(_HOT_ITEMS.values())[-3:]
     return {
         "source": source,
         "refresh": bool(refresh),
