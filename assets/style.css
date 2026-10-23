@@ -1643,7 +1643,7 @@ input[type="range"]::-moz-range-thumb {
     width: 250px;
     box-shadow: 30px 0 80px -30px rgba(0, 0, 0, .5);
   }
-  .sidebar.open { transform: none; }
+  .sidebar.open { transform: none; z-index: 95; }
   .app { margin-left: 0; }
   .menu-btn { display: grid; }
   .topbar { padding: 0 20px; }
