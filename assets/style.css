@@ -1511,6 +1511,7 @@ input[type="range"]::-moz-range-thumb {
 .draft-line { display: grid; grid-template-columns: 52px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 10.5px; line-height: 1.6; }
 .draft-line:last-child { border-bottom: 0; }
 .draft-time { font-family: var(--font-mono); font-size: 8.5px; color: var(--accent); padding-top: 2px; }
+.draft-ai-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.8; color: var(--ink-soft); }
 .draft-note { margin-top: 12px; font-size: 8.5px; color: var(--faint); display: flex; gap: 5px; align-items: center; }
 .draft-skeleton { padding: 6px 0; }
 .sk-line { height: 10px; border-radius: 4px; margin-bottom: 9px; background: linear-gradient(90deg, var(--surface-2) 20%, #fdfcf8 50%, var(--surface-2) 80%); background-size: 220% 100%; animation: shimmer 1.2s infinite; }

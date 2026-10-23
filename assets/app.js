@@ -835,6 +835,9 @@
   function draftHtmlFromBackend(content, tab) {
     var c = content;
     if (!c) return '';
+    if (typeof c === 'string') {
+      return '<h4>AI 初稿 · GLM</h4><div class="draft-ai-text">' + esc(c) + '</div>';
+    }
     if (tab === 'story') {
       var shots = c.content || [];
       return '<h4>分镜提示 · ' + shots.length + ' 个镜头</h4>' + shots.map(function (s) {

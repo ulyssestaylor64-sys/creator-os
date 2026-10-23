@@ -9,47 +9,95 @@ from typing import AsyncIterator
 
 import httpx
 
-GLM_API_KEY = os.getenv("GLM_API_KEY")
 GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
-GLM_MODEL = "glm-5.3-flash"
+# 可通过环境变量 GLM_MODEL 覆盖；若模型名不可用会自动尝试备用模型
+DEFAULT_MODEL = "glm-5.3-flash"
+FALLBACK_MODELS = ["glm-4-flash", "glm-4.5-flash", "glm-4-plus", "glm-4-air"]
+
+# 最近一次调用状态，供 /api/ai/status 排查
+LAST = {"ok": False, "model": "", "error": "", "provider": "mock"}
 
 
-def _has_key() -> bool:
-    return bool(GLM_API_KEY and GLM_API_KEY.strip() and not GLM_API_KEY.startswith("your"))
+def _key() -> str:
+    key = (os.getenv("GLM_API_KEY") or "").strip()
+    if not key or key.startswith("your"):
+        return ""
+    return key
+
+
+def has_key() -> bool:
+    return bool(_key())
+
+
+def model_name() -> str:
+    return (os.getenv("GLM_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+
+
+def _candidates() -> list[str]:
+    models = [model_name()] + FALLBACK_MODELS
+    seen, out = set(), []
+    for m in models:
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
 
 
 def _headers() -> dict:
     return {
-        "Authorization": f"Bearer {GLM_API_KEY}",
+        "Authorization": f"Bearer {_key()}",
         "Content-Type": "application/json",
     }
 
 
 async def chat_completion(messages: list[dict], temperature: float = 0.7) -> str:
-    """非流式 GLM 调用，返回文本内容。"""
-    if not _has_key():
+    """非流式 GLM 调用，返回文本内容；失败返回空字符串。"""
+    if not has_key():
+        LAST.update(ok=False, provider="mock", error="GLM_API_KEY 未配置")
         return ""
-    payload = {
-        "model": GLM_MODEL,
+
+    payload_base = {
         "messages": messages,
         "temperature": temperature,
     }
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(f"{GLM_BASE_URL}/chat/completions", headers=_headers(), json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
-    except Exception:
-        return ""
+    last_error = ""
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for model in _candidates():
+            try:
+                resp = await client.post(
+                    f"{GLM_BASE_URL}/chat/completions",
+                    headers=_headers(),
+                    json={**payload_base, "model": model},
+                )
+                if resp.status_code == 404 or resp.status_code == 400:
+                    # 模型名不可用，换下一个候选
+                    last_error = f"{model}: {resp.status_code} {resp.text[:160]}"
+                    continue
+                if resp.status_code in (401, 403):
+                    last_error = "鉴权失败（401/403）：请检查 GLM_API_KEY 是否正确或已过期"
+                    break
+                if resp.status_code == 429:
+                    last_error = "调用频率超限或额度不足（429）：请稍后再试或检查账户余额"
+                    break
+                resp.raise_for_status()
+                data = resp.json()
+                text = data["choices"][0]["message"]["content"]
+                LAST.update(ok=True, model=model, error="", provider="glm")
+                return text
+            except Exception as exc:
+                last_error = f"{model}: {exc}"
+                continue
+
+    LAST.update(ok=False, model=model_name(), error=last_error, provider="mock")
+    return ""
 
 
 async def chat_completion_stream(messages: list[dict], temperature: float = 0.7) -> AsyncIterator[str]:
     """流式 GLM 调用，按 chunk 产出文本。"""
-    if not _has_key():
+    if not has_key():
         return
     payload = {
-        "model": GLM_MODEL,
+        "model": model_name(),
         "messages": messages,
         "temperature": temperature,
         "stream": True,
@@ -71,8 +119,23 @@ async def chat_completion_stream(messages: list[dict], temperature: float = 0.7)
                             yield delta
                     except Exception:
                         continue
-    except Exception:
+    except Exception as exc:
+        LAST.update(ok=False, model=model_name(), error=str(exc), provider="mock")
         return
+
+
+async def ping() -> dict:
+    """用一条极短的请求验证 Key 是否可用。"""
+    if not has_key():
+        return {"ok": False, "provider": "mock", "model": "", "error": "GLM_API_KEY 未配置"}
+    text = await chat_completion([{"role": "user", "content": "回复两个字：可用"}], temperature=0.1)
+    return {
+        "ok": bool(text),
+        "provider": LAST["provider"],
+        "model": LAST["model"],
+        "error": LAST["error"],
+        "sample": text[:40],
+    }
 
 
 def mock_ai_result(prompt_type: str, topic: str = "") -> str:

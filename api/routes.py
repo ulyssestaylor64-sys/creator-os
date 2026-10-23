@@ -71,14 +71,52 @@ def topic_detail(topic_id: str):
 
 
 @router.post("/draft")
-def draft(req: DraftRequest):
-    content = mock_data.generate_draft(req.topicId, req.type)
+async def draft(req: DraftRequest):
+    topic = mock_data.generate_topic_detail(req.topicId) or {}
+    title = topic.get("title", "")
+    audience = topic.get("audience", "个人创作者")
+    framework = topic.get("framework") or []
+    framework_text = "\n".join(
+        "{} {}：{}".format(step[0], step[1], step[2]) for step in framework if len(step) >= 3
+    )
+
+    hints = {
+        "script": "输出可直接开拍的口播脚本，按时间段分层，每段标注时间与作用。",
+        "story": "输出分镜脚本，逐镜标注景别、画面内容与字幕，控制在 60 秒内。",
+        "titles": "输出 5 条备选标题，风格各不相同，每条不超过 30 字。",
+    }
+    user_prompt = (
+        f"选题：{title}\n目标人群：{audience}\n参考结构：\n{framework_text}\n\n"
+        f"{hints.get(req.type, hints['script'])}\n只输出正文，不要解释。"
+    )
+
+    text = await ai_client.chat_completion([
+        {"role": "system", "content": "你是资深抖音内容策略师，擅长把选题写成高完播率的口播与分镜脚本。语言口语化，不说废话。"},
+        {"role": "user", "content": user_prompt},
+    ])
+
     return {
         "topicId": req.topicId,
         "type": req.type,
-        "model": "GLM-5.3-Flash",
-        "content": content,
+        "model": ai_client.LAST["model"] if text else "mock",
+        "ai": bool(text),
+        "content": text or mock_data.generate_draft(req.topicId, req.type),
     }
+
+
+# ---------- ai ----------
+@router.get("/ai/status")
+async def ai_status(ping: int = Query(0)):
+    info = {
+        "has_key": ai_client.has_key(),
+        "model": ai_client.model_name(),
+        "provider": ai_client.LAST["provider"],
+        "last_ok": ai_client.LAST["ok"],
+        "last_error": ai_client.LAST["error"],
+    }
+    if ping:
+        info["ping"] = await ai_client.ping()
+    return info
 
 
 # ---------- niche ----------
