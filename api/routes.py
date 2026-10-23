@@ -131,7 +131,12 @@ class RecommendationRequest(BaseModel):
 # ---------- health ----------
 @router.get("/health")
 def health():
-    return mock_data.health()
+    payload = mock_data.health()
+    try:
+        payload["db"] = store.db_status()
+    except Exception as exc:  # noqa: BLE001
+        payload["db"] = {"ok": False, "error": str(exc)}
+    return payload
 
 
 # ---------- auth ----------

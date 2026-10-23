@@ -4,8 +4,8 @@ Creator OS — 轻量持久化层（SQLite）
 只保存用户产生的数据：账号、会话、评论规则、收藏选题、AI 草稿、导入的爆款。
 所有用户数据按 owner 隔离：登录用户为 u_xxx，未登录设备为 dev_xxx。
 
-注意：Render 免费实例的文件系统是临时的，实例重启/重新部署后数据库会重置；
-如需长期保存，请挂载 Render Disk 或改用 Postgres（接口不变）。
+注意：数据库路径可通过 CREATOROS_DB 指定。生产环境应指向挂载的持久磁盘
+（Render: mountPath=/var/data），否则实例重启/重新部署后数据会重置。
 """
 import json
 import os
@@ -20,8 +20,14 @@ DB_PATH = os.getenv("CREATOROS_DB", os.path.join(_DEFAULT_DIR, "creatoros.db"))
 
 def _connect() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    # 多设备并发写入时降低锁冲突
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+    except sqlite3.DatabaseError:
+        pass
     return conn
 
 
@@ -330,6 +336,27 @@ def list_imported_hits(owner: str) -> list[dict]:
         except ValueError:
             continue
     return out
+
+
+def db_status() -> dict:
+    """运行状态：用于确认数据库是否落在持久磁盘上。"""
+    info = {
+        "path": DB_PATH,
+        "exists": os.path.exists(DB_PATH),
+        "persistent": os.getenv("CREATOROS_PERSISTENT", "") == "1",
+        "writable": os.access(os.path.dirname(DB_PATH), os.W_OK),
+        "size_bytes": os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0,
+    }
+    try:
+        with _connect() as conn:
+            info["users"] = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+            info["saved_topics"] = conn.execute("SELECT COUNT(*) AS c FROM saved_topics").fetchone()["c"]
+            info["journal_mode"] = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        info["ok"] = True
+    except Exception as exc:  # noqa: BLE001
+        info["ok"] = False
+        info["error"] = str(exc)
+    return info
 
 
 init_db()

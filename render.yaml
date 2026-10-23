@@ -2,11 +2,20 @@ services:
   - name: creator-os
     type: web
     runtime: python
-    plan: free
+    plan: starter          # 持久磁盘仅支持付费实例（Free 不支持 disk）
     autoDeploy: true
+    disk:
+      name: creatoros-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      # 数据库放在持久磁盘上，实例重启/重新部署后数据保留
+      - key: CREATOROS_DB
+        value: /var/data/creatoros.db
+      - key: CREATOROS_PERSISTENT
+        value: "1"
       # 可选：在 Render 控制台填入后自动生效
       # - key: GLM_API_KEY
       #   sync: false
