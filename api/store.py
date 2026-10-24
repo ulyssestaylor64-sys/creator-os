@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import sqlite3
+import time
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
@@ -243,7 +244,7 @@ def _schema() -> str:
         """
 
 
-def init_db() -> None:
+def _init_once() -> None:
     with _connect() as conn:
         if IS_PG:
             for stmt in [s.strip() for s in _schema().split(";") if s.strip()]:
@@ -255,6 +256,20 @@ def init_db() -> None:
                 if os.path.exists(DB_PATH):
                     shutil.copy2(DB_PATH, DB_PATH + ".bak")
                 _migrate_user_scope(conn)
+
+
+def init_db() -> None:
+    """启动时建表。外部数据库可能短暂不可达，重试 3 次再失败退出。"""
+    last_error = None
+    for attempt in range(3):
+        try:
+            _init_once()
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"数据库初始化失败：{last_error}")
 
 
 # ---------- 账号 ----------
